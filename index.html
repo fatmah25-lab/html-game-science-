@@ -1,0 +1,1011 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>مغامرة العلوم الممتعة</title>
+<style>
+:root{
+  --glass:rgba(6,20,44,.72);
+  --line:rgba(255,255,255,.18);
+  --gold:#ffd54a;
+  --cyan:#65e6ff;
+  --green:#59ef7a;
+  --danger:#ff6b6b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#06152a;font-family:Tahoma,"Segoe UI",Arial,sans-serif}
+button,input{font:inherit}
+#game{position:fixed;inset:0;overflow:hidden;background:#071a2d}
+/* الخلفية مستقلة عن عالم الحركة حتى لا تتمدد أو تتشوه عند تحريك الكاميرا */
+#backgroundLayer{
+  position:absolute;inset:0;z-index:0;
+  background-image:url("assets/background-brain.png");
+  background-size:cover;
+  background-position:center center;
+  background-repeat:no-repeat;
+  transform:translateZ(0);
+}
+#world{
+  position:absolute;left:0;top:0;height:900px;
+  width:4200px;transform:translate3d(0,0,0) scale(var(--world-scale,1));
+  transform-origin:top left;
+  will-change:transform;
+  background:transparent;
+  z-index:1;
+}
+#world::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(to bottom,rgba(0,10,30,.02),rgba(0,10,30,.10));
+}
+#playfield{position:absolute;left:0;top:0;width:4200px;height:900px;overflow:hidden}
+#player{
+  position:absolute;z-index:20;width:150px;height:auto;user-select:none;
+  pointer-events:none;image-rendering:auto;
+  filter:drop-shadow(0 12px 7px rgba(0,0,0,.28));
+  will-change:left,top,transform;
+}
+.platform{
+  position:absolute;z-index:8;user-select:none;pointer-events:none;
+  object-fit:contain;filter:drop-shadow(0 9px 7px rgba(0,0,0,.18));
+}
+/* علامة السؤال داخل منتصف كل مرحلة */
+.questionMarker{
+  position:absolute;z-index:15;width:78px;height:78px;border-radius:50%;
+  display:grid;place-items:center;
+  color:#fff8bf;font-size:54px;font-weight:1000;line-height:1;
+  background:radial-gradient(circle at 35% 28%,#fff8a8 0 8%,#ffd54a 25%,#f3a400 68%,#b86400 100%);
+  border:4px solid rgba(255,245,170,.95);
+  box-shadow:0 0 0 5px rgba(255,205,55,.18),0 0 28px rgba(255,196,35,.62),0 10px 22px rgba(0,0,0,.28);
+  text-shadow:0 2px 4px rgba(90,45,0,.45);
+  animation:questionPulse 1.15s ease-in-out infinite;
+  user-select:none;pointer-events:none;
+}
+.questionMarker::after{
+  content:"";position:absolute;inset:-10px;border-radius:50%;
+  border:2px solid rgba(255,225,90,.28);
+  animation:questionRing 1.15s ease-out infinite;
+}
+@keyframes questionPulse{50%{transform:translateY(-7px) scale(1.06)}}
+@keyframes questionRing{0%{transform:scale(.88);opacity:.7}100%{transform:scale(1.28);opacity:0}}
+
+.coin{
+  position:absolute;z-index:12;width:42px;height:42px;border-radius:50%;
+  display:grid;place-items:center;font-weight:900;color:#744500;
+  background:radial-gradient(circle at 30% 25%,#fff6a6 0 10%,#ffd84d 28%,#f6a800 72%,#b96900 100%);
+  border:4px solid #fff0a0;box-shadow:0 0 0 4px rgba(255,210,50,.2),0 8px 16px rgba(0,0,0,.25);
+  animation:coinFloat 1.3s ease-in-out infinite;
+}
+.coin::after{content:"★";font-size:19px;text-shadow:0 1px 0 #fff}
+@keyframes coinFloat{50%{transform:translateY(-8px) rotate(8deg)}}
+.flag{
+  position:absolute;z-index:11;width:58px;height:120px;
+  filter:drop-shadow(0 8px 5px rgba(0,0,0,.25));
+}
+.flag .pole{position:absolute;right:26px;top:0;width:7px;height:120px;background:linear-gradient(90deg,#d9d9d9,#fff,#a8a8a8);border-radius:5px}
+.flag .cloth{position:absolute;right:31px;top:6px;width:62px;height:42px;background:linear-gradient(135deg,#35ed70,#09a83e);clip-path:polygon(0 0,100% 0,82% 52%,100% 100%,0 100%);box-shadow:0 4px 8px rgba(0,0,0,.2)}
+.flag .cloth::after{content:"⚑";position:absolute;inset:0;display:grid;place-items:center;color:white;font-size:20px}
+#hud{
+  position:fixed;z-index:100;left:14px;right:14px;top:12px;
+  display:flex;gap:10px;align-items:center;justify-content:space-between;direction:rtl;
+  pointer-events:none;
+}
+.hudBox{
+  pointer-events:auto;display:flex;align-items:center;gap:10px;padding:9px 13px;
+  color:#fff;background:var(--glass);border:1px solid var(--line);
+  backdrop-filter:blur(10px);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.18)
+}
+.hudBox strong{color:var(--gold)}
+#fact{
+  max-width:min(58vw,650px);font-size:14px;line-height:1.5;text-align:right;
+}
+#stageTitle{font-weight:900}
+#progressWrap{width:140px;height:8px;background:rgba(255,255,255,.15);border-radius:20px;overflow:hidden}
+#progress{height:100%;width:0;background:linear-gradient(90deg,#45e67a,#63dfff);transition:width .2s}
+#touch{
+  position:fixed;z-index:110;bottom:18px;left:18px;right:18px;
+  display:flex;justify-content:space-between;align-items:end;direction:ltr;
+  pointer-events:none;
+}
+.pad,.jump{
+  pointer-events:auto;display:flex;gap:10px;
+}
+.tbtn{
+  width:68px;height:68px;border-radius:22px;border:1px solid rgba(255,255,255,.25);
+  color:white;background:rgba(4,22,42,.66);backdrop-filter:blur(10px);
+  box-shadow:0 8px 22px rgba(0,0,0,.25);font-size:25px;font-weight:900;
+  touch-action:none;user-select:none;
+}
+.tbtn:active{transform:scale(.95);background:rgba(28,92,120,.8)}
+#jumpBtn{width:82px;background:linear-gradient(135deg,rgba(26,168,220,.85),rgba(47,87,210,.8))}
+#screen{
+  position:fixed;z-index:5000;inset:0;display:grid;place-items:center;
+  background:radial-gradient(circle at 50% 35%,rgba(31,121,165,.22),rgba(2,10,24,.82));
+  backdrop-filter:blur(5px);padding:clamp(12px,3vh,28px) 12px;
+  overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+}
+/* خلفية عنابية أنيقة للصفحة الرئيسية فقط */
+#screen.homeScreen{
+  background:
+    radial-gradient(circle at 50% 18%,rgba(151,42,78,.30),transparent 42%),
+    radial-gradient(circle at 15% 85%,rgba(102,19,49,.22),transparent 38%),
+    linear-gradient(145deg,#4a1023 0%,#350b1a 52%,#240712 100%);
+}
+#screen.homeScreen .panel{
+  background:linear-gradient(145deg,rgba(72,18,38,.97),rgba(38,8,20,.97));
+  border-color:rgba(255,215,225,.18);
+}
+.panel{
+  width:min(720px,94vw);max-height:calc(100dvh - 24px);overflow-y:auto;
+  padding:clamp(18px,3vw,30px);border-radius:30px;color:#fff;text-align:center;
+  background:linear-gradient(145deg,rgba(8,29,55,.97),rgba(5,15,33,.96));
+  border:1px solid rgba(255,255,255,.16);box-shadow:0 30px 90px rgba(0,0,0,.45);
+  scrollbar-width:thin;
+}
+.logo{font-size:clamp(32px,6vw,58px);font-weight:1000;letter-spacing:-2px;
+  background:linear-gradient(90deg,#fff,#6eeaff,#66f47d);-webkit-background-clip:text;background-clip:text;color:transparent}
+.subtitle{color:#c8e7f5;line-height:1.8;margin:10px 0 22px}
+#name{width:min(430px,100%);padding:15px 18px;border-radius:16px;border:1px solid rgba(255,255,255,.18);
+  background:rgba(255,255,255,.08);color:#fff;outline:none;text-align:center}
+#name::placeholder{color:#a9c4d4}
+.primary,.secondary{
+  border:0;border-radius:16px;padding:13px 24px;cursor:pointer;font-weight:900;margin:8px 4px;
+}
+.primary{color:#052039;background:linear-gradient(135deg,#72f2ff,#63ee82);box-shadow:0 10px 30px rgba(83,226,186,.2)}
+.secondary{color:#fff;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.14)}
+.infoGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:20px 0}
+.infoCard{padding:13px;border-radius:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
+.infoCard b{display:block;color:#67ebff;font-size:22px;margin-bottom:4px}
+.small{font-size:13px;color:#9eb8c8;line-height:1.7}
+#transition{display:none}
+.bigScore{font-size:56px;color:#ffd84d;font-weight:1000;margin:8px}
+.toast{
+  position:fixed;z-index:180;left:50%;top:88px;transform:translateX(-50%) translateY(-10px);
+  padding:11px 17px;border-radius:15px;background:rgba(7,24,45,.9);color:white;border:1px solid rgba(255,255,255,.16);
+  opacity:0;transition:.25s;pointer-events:none
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:700px){
+  #hud{left:8px;right:8px;top:8px;gap:6px}
+  .hudBox{padding:7px 9px;border-radius:13px;font-size:12px}
+  #fact{display:none}.tbtn{width:60px;height:60px}
+  .infoGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:14px 0}
+  .infoCard{padding:10px 5px;font-size:12px;line-height:1.35}
+  .infoCard b{font-size:19px;margin-bottom:3px}
+  #player{width:118px}
+  .panel{padding:18px 14px;border-radius:24px;max-height:calc(100dvh - 18px)}
+  #startPanel .logo{font-size:clamp(34px,9vw,48px)}
+  #startPanel .subtitle{font-size:15px;line-height:1.6;margin:7px 0 12px}
+  #startPanel .small{font-size:11px;line-height:1.5}
+  #startPanel .primary{width:min(100%,360px);min-height:48px;margin:6px auto}
+  #startPanel #designerFooterFinal{margin-top:10px;font-size:12px}
+}
+@media(max-width:390px){
+  .infoGrid{gap:5px}
+  .infoCard{padding:8px 3px;font-size:10.5px}
+  .infoCard b{font-size:17px}
+  #startPanel .subtitle{font-size:14px}
+}
+@media(min-width:1000px){#touch{opacity:.72}}
+</style>
+
+<style id="timing-name-ui">
+.nameRow{display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:10px 0 4px}
+.nameRow input{width:min(260px,42vw);padding:15px 18px;border-radius:16px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;outline:none;text-align:center;font-family:inherit}
+.nameRow input::placeholder{color:#a9c4d4}
+.nameGap{font-weight:900;color:#9eb8c8}
+.timeHud{display:flex;gap:8px;align-items:center}
+.timeValue{color:#67ebff;font-weight:900;font-variant-numeric:tabular-nums}
+.homeStats{margin-top:12px}
+.finalTimes{margin:16px 0 4px;line-height:2;font-size:15px;color:#d9eef7}
+.finalTimes strong{color:#67ebff;font-variant-numeric:tabular-nums}
+</style>
+
+<style id="designerFooterFinalStyle">
+#designerFooterFinal{width:100%;text-align:right;margin:18px 0 0;padding:8px 12px 4px;font-weight:700;font-size:14px;opacity:.88;direction:rtl}
+</style>
+<style id="homeTypography">
+#startPanel{
+  font-family:"Tajawal","Noto Sans Arabic","Segoe UI",Tahoma,Arial,sans-serif;
+}
+#startPanel .logo{
+  font-weight:900;
+  letter-spacing:.2px;
+}
+#startPanel .subtitle,
+#startPanel .small,
+#startPanel .homeStats,
+#startPanel .infoCard,
+#startPanel .primary,
+#startPanel #name{
+  font-family:inherit;
+}
+#startPanel #name{
+  font-size:18px;
+  font-weight:700;
+}
+</style>
+
+<style id="home-arabic-font-enhancement">
+/* الصفحة الرئيسية فقط: خط عربي واضح وملفت */
+#start, #start * {
+  font-family: "Tajawal", "Cairo", "Noto Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif !important;
+}
+#start #name {
+  direction: rtl;
+  text-align: right;
+  letter-spacing: normal;
+  word-spacing: 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+#start #name::placeholder {
+  word-spacing: 3px;
+}
+</style>
+
+
+<style id="mobile-stage-polish">
+  #backgroundLayer{
+    background-size:cover !important;
+    background-position:center center !important;
+  }
+  #playfield{min-height:100%}
+  #player{max-width:none;object-fit:contain}
+  @media (max-width: 900px){
+    #game{min-height:100dvh}
+    #hud{top:max(8px, env(safe-area-inset-top));}
+    #touch{
+      bottom:max(10px, env(safe-area-inset-bottom));
+      padding-left:max(10px, env(safe-area-inset-left));
+      padding-right:max(10px, env(safe-area-inset-right));
+    }
+    .tbtn{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  }
+  @media (orientation:landscape) and (max-width:900px){
+    #touch{bottom:8px}
+    .tbtn{width:56px;height:56px}
+  }
+</style>
+<style id="responsive-final-v8">
+*{box-sizing:border-box}html,body{width:100%;min-height:100%;margin:0;padding:0;overflow-x:hidden;-webkit-text-size-adjust:100%}body{min-height:100dvh;touch-action:manipulation}canvas{display:block;margin:auto}button,input{font:inherit}button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}#hud{width:100%;max-width:1200px;margin:auto;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px}#touch{touch-action:none;user-select:none;-webkit-user-select:none}#touch button{min-width:54px;min-height:54px}
+@media(min-width:1101px){canvas{max-width:80vw;max-height:78dvh;width:auto!important;height:auto!important}#touch{display:none!important}}
+@media(min-width:601px) and (max-width:1100px){body{padding:8px}canvas{max-width:94vw;max-height:72dvh;width:auto!important;height:auto!important}#touch{position:fixed;left:0;right:0;bottom:max(10px,env(safe-area-inset-bottom));z-index:9999;display:flex;justify-content:center;gap:12px;padding:8px}#touch button{width:62px;height:62px}}
+@media(max-width:600px){body{padding:0 5px}canvas{max-width:100vw;width:100%!important;height:auto!important}#hud{font-size:clamp(11px,3vw,15px);gap:4px;padding:4px}#touch{position:fixed;left:0;right:0;bottom:max(7px,env(safe-area-inset-bottom));z-index:9999;display:flex;justify-content:center;gap:clamp(5px,2vw,10px);padding:5px}#touch button{width:clamp(50px,15vw,62px);height:clamp(50px,15vw,62px);min-width:0;min-height:0}}
+@media(max-width:380px){#touch{gap:4px}#touch button{width:48px;height:48px}}
+@media(orientation:landscape) and (max-width:900px){canvas{max-height:72dvh;width:auto!important}}
+</style><style id="coin-reward-v9">
+.coinRewardV9{position:fixed;z-index:250;right:clamp(16px,3vw,60px);bottom:clamp(92px,12vh,150px);padding:9px 14px;border-radius:14px;background:rgba(8,31,48,.88);border:1px solid rgba(255,220,80,.45);color:#ffe45c;font-weight:900;font-size:clamp(16px,1.8vw,25px);pointer-events:none;opacity:0;transform:translateY(8px);transition:opacity .18s,transform .18s;direction:rtl;white-space:nowrap}.coinRewardV9.show{opacity:1;transform:translateY(0)}
+@media(max-width:1100px){.coinRewardV9{right:18px;bottom:120px;font-size:20px}}
+@media(max-width:600px){.coinRewardV9{right:12px;bottom:112px;font-size:17px;padding:7px 10px}}
+</style><style id="circulatory-questions-style">
+#questionPanel{max-width:min(760px,94vw)}
+.questionStage{color:#67ebff;font-weight:900;font-size:15px;margin-top:-4px;margin-bottom:8px}
+.questionText{font-size:clamp(20px,3vw,30px);line-height:1.7;font-weight:800;color:#fff;margin:10px auto 18px;max-width:650px}
+.questionOptions{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:620px;margin:0 auto}
+.questionOption{border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:13px 12px;color:#fff;background:rgba(255,255,255,.07);cursor:pointer;font-weight:800;line-height:1.45;transition:.15s}
+.questionOption:hover{background:rgba(101,230,255,.15);transform:translateY(-1px)}
+.questionOption.correct{background:rgba(89,239,122,.22);border-color:rgba(89,239,122,.7)}
+.questionOption.wrong{background:rgba(255,107,107,.18);border-color:rgba(255,107,107,.65)}
+.questionFeedback{min-height:28px;margin-top:14px;font-weight:900;color:#ffe45c}
+@media(max-width:600px){#questionPanel{padding:18px 14px}.questionOptions{grid-template-columns:1fr;gap:9px}.questionOption{padding:12px 10px;font-size:14px}.questionText{font-size:19px;line-height:1.6}}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="backgroundLayer" aria-hidden="true"></div>
+  <div id="world">
+    <div id="playfield"></div>
+    <img id="player" src="assets/child.png" alt="الطفل">
+  </div>
+
+  <div id="hud">
+    <div class="hudBox"><span id="playerName">لاعب</span></div>
+    <div class="hudBox"><span>⭐</span><strong id="score">0</strong></div>
+    <div class="hudBox"><span>🪙</span><strong id="coins">0</strong></div>
+    <div class="hudBox"><span id="stageTitle">المرحلة 1</span><div id="progressWrap"><div id="progress"></div></div></div><div class="hudBox timeHud">⏱️ <span id="stageTimer" class="timeValue">00:00</span></div>
+    <div class="hudBox" id="fact">معلومة: الخلية هي الوحدة الأساسية للحياة.</div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <div id="touch">
+    <div class="pad">
+      <button class="tbtn" id="leftBtn" aria-label="يسار">◀</button>
+      <button class="tbtn" id="rightBtn" aria-label="يمين">▶</button>
+    </div>
+    <div class="jump">
+      <button class="tbtn" id="jumpBtn" aria-label="قفز">↟</button>
+    </div>
+  </div>
+
+  <div id="screen">
+    <div class="panel" id="startPanel">
+      <div class="logo">مغامرة العلوم الممتعة</div>
+      <div class="subtitle"><br>اجمع العملات، أجب عن أسئلة الجهاز الدوري، واعبر المراحل الثلاث.</div>
+      <div class="nameRow">
+  <input id="name" placeholder="اكتب اسم اللاعب" aria-label="اسم اللاعب الثلاثي" type="text">
+</div>
+      <div class="infoGrid">
+        <div class="infoCard"><b>3</b>مراحل متسلسلة</div>
+        <div class="infoCard"><b>🪙</b>عملات ونقاط</div>
+        <div class="infoCard"><b>🏁</b>أعلام للانتقال</div>
+      </div>
+      <button class="primary" id="startBtn">ابدأ المغامرة</button>
+      <div class="small">الأسهم للحركة · Space للقفز · ويمكن اللعب باللمس على الهاتف واللوحي</div>
+      <div class="small homeStats">
+  أعلى نتيجة: <strong id="highScoreStart">0</strong>
+  <span style="margin-inline:14px">|</span>
+  أسرع زمن: <strong id="bestTimeStart">--:--</strong>
+</div>
+      <div id="designerFooterFinal">التصميم : فاطمة أحمد</div>
+    </div>
+
+    <div class="panel" id="stagePanel" style="display:none">
+      <div class="logo" style="font-size:40px" id="stagePanelTitle">المرحلة 1</div>
+      <div class="subtitle" id="stagePanelFact"></div>
+      <div class="infoGrid">
+        <div class="infoCard"><b>← →</b>تحرّك</div>
+        <div class="infoCard"><b>SPACE</b>اقفز</div>
+        <div class="infoCard"><b>🏁</b>وصل للعلم</div>
+      </div>
+      <button class="primary" id="continueBtn">دخول المرحلة</button>
+    </div>
+    <div class="panel" id="questionPanel" style="display:none">
+      <div class="logo" style="font-size:36px">سؤال علمي</div>
+      <div class="questionStage" id="questionStageLabel">المرحلة 1</div>
+      <div class="questionText" id="questionText"></div>
+      <div class="questionOptions" id="questionOptions"></div>
+      <div class="questionFeedback" id="questionFeedback"></div>
+    </div>
+
+    <div class="panel" id="endPanel" style="display:none">
+      <div class="logo" style="font-size:44px">أحسنت يا بطل!</div>
+      <div class="subtitle">لقد أنهيت مغامرة العلوم الممتعة كاملة.</div>
+      <div class="bigScore" id="finalScore">0</div>
+      <div>النقاط النهائية</div>
+<div class="finalTimes">
+  المرحلة الأولى: <strong id="finalStage1">00:00</strong><br>
+  المرحلة الثانية: <strong id="finalStage2">00:00</strong><br>
+  المرحلة الثالثة: <strong id="finalStage3">00:00</strong><br>
+  الزمن الكلي: <strong id="finalTotalTime">00:00</strong>
+</div>
+      <div class="infoGrid">
+        <div class="infoCard"><b id="finalCoins">0</b>عملة</div>
+        <div class="infoCard"><b id="finalBest">0</b>أعلى نتيجة</div>
+        <div class="infoCard"><b>3/3</b>مراحل</div>
+      </div>
+      <button class="primary" id="restartBtn">العودة إلى الصفحة الرئيسية</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const world = $("world"), field = $("playfield"), player = $("player"), screen = $("screen");
+  const scoreEl=$("score"), coinsEl=$("coins"), stageTitle=$("stageTitle"), factEl=$("fact"), progressEl=$("progress");
+  const toast=$("toast");
+  const W=4200;
+  const WORLD_H=900;
+  let vw=innerWidth, vh=innerHeight;
+  let stage=1, score=0, coins=0, best=Number(localStorage.getItem("scienceAdventureBest")||0);
+  let bestTime=Number(localStorage.getItem("scienceAdventureBestTime")||0);
+  let studentName="لاعب";
+  let totalStart=0, stageStart=0, stageTimes=[0,0,0], totalTime=0, timing=false;
+  let name="لاعب", running=false, cameraX=0, last=performance.now(), toastTimer;
+  const keys={left:false,right:false};
+  // أصوات اللعبة: قصيرة وخفيفة، وتعمل مباشرة بعد أول تفاعل من اللاعب.
+  let audioCtx=null;
+  function audioReady(){
+    try{
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC) return null;
+      if(!audioCtx) audioCtx=new AC();
+      if(audioCtx.state==="suspended") audioCtx.resume();
+      return audioCtx;
+    }catch(e){return null}
+  }
+  function beep(freq,duration,type="sine",volume=.045,delay=0){
+    const ctx=audioReady(); if(!ctx)return;
+    const t=ctx.currentTime+delay;
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,t);
+    g.gain.setValueAtTime(.0001,t);
+    g.gain.exponentialRampToValueAtTime(volume,t+.012);
+    g.gain.exponentialRampToValueAtTime(.0001,t+duration);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t); o.stop(t+duration+.02);
+  }
+  function playCoinSound(){
+    beep(880,.07,"sine",.045,0);
+    beep(1320,.10,"sine",.035,.05);
+  }
+  function playFallSound(){
+    beep(420,.09,"triangle",.035,0);
+    beep(260,.13,"triangle",.025,.065);
+  }
+
+  let px=180, py=vh-260, vx=0, vy=0, grounded=false, jumpLock=false;
+  let coyoteTime=0, jumpBuffer=0, safePlatform=null;
+  const playerW=150; let playerH=190;
+  const gravity=1850, speed=440, jump=735;
+
+  const facts=[
+    "معلومة: القلب عضلة تضخ الدم إلى جميع أجزاء الجسم عبر الأوعية الدموية.",
+    "معلومة: الشرايين تنقل الدم بعيدًا عن القلب، بينما تعيد الأوردة الدم إلى القلب.",
+    "معلومة: خلايا الدم الحمراء تحمل الأكسجين، وتساعد الصفائح الدموية على إيقاف النزيف."
+  ];
+  const stageNames=["رحلة مع القلب","طريق الدم في الأوعية","مهمة خلايا الدم"];
+
+  // World layouts: x/y are in the game world; platforms use the supplied separate organelle images.
+  const layouts=[
+    {
+      // فروق الارتفاع صغيرة حتى تكون كل قفزة قابلة للوصول بسهولة
+      platforms:[
+        [100,650,320,154,1],[500,610,300,145,2],[900,650,318,150,3],[1300,600,310,145,4],
+        [1710,640,320,154,1],[2120,590,320,154,2],[2530,640,320,154,3],[2940,595,320,154,4],[3350,640,320,154,2],[3760,600,320,154,1]
+      ],
+      coins:[
+        [190,585],[270,545],[590,545],[670,505],[990,585],[1070,545],[1390,535],[1470,495],
+        [1800,575],[1880,535],[2210,525],[2290,485],[2620,575],[2700,535],[3030,530],[3110,490],
+        [3440,575],[3520,535],[3850,535],[3930,495]
+      ],
+      flag:4070
+    },
+    {
+      platforms:[
+        [80,660,320,154,2],[490,615,320,154,3],[900,650,320,154,1],[1310,605,320,154,4],
+        [1720,650,320,154,2],[2130,600,320,154,3],[2540,645,320,154,1],[2950,595,320,154,4],[3360,640,320,154,2],[3770,600,320,154,3]
+      ],
+      coins:[
+        [170,595],[250,555],[590,550],[670,510],[1000,585],[1080,545],[1410,540],[1490,500],
+        [1820,585],[1900,545],[2230,535],[2310,495],[2640,580],[2720,540],[3050,535],[3130,495],
+        [3460,575],[3540,535],[3870,535],[3950,495]
+      ],
+      flag:4080
+    },
+    {
+      platforms:[
+        [100,650,320,154,4],[510,605,320,154,1],[920,645,320,154,3],[1330,595,320,154,2],
+        [1740,640,320,154,4],[2150,590,320,154,1],[2560,635,320,154,3],[2970,585,320,154,2],[3380,630,320,154,4],[3790,590,320,154,1]
+      ],
+      coins:[
+        [190,585],[270,545],[610,540],[690,500],[1020,580],[1100,540],[1430,530],[1510,490],
+        [1840,575],[1920,535],[2250,525],[2330,485],[2660,570],[2740,530],[3070,525],[3150,485],
+        [3480,565],[3560,525],[3890,525],[3970,485]
+      ],
+      flag:4100
+    }
+  ];
+
+  const circulatoryQuestions=[
+    {q:"ما العضو الذي يضخ الدم إلى جميع أجزاء الجسم؟",options:["القلب","الرئتان","المعدة","الدماغ"],answer:0},
+    {q:"ما وظيفة الشرايين؟",options:["تنقل الدم بعيدًا عن القلب","تهضم الطعام","تنتج العظام","تنقل الهواء فقط"],answer:0},
+    {q:"أي مكوّن من الدم يحمل الأكسجين إلى خلايا الجسم؟",options:["خلايا الدم الحمراء","الصفائح الدموية","بلازما الدم فقط","العظام"],answer:0}
+  ];
+  let questionShown=false, questionActive=false, questionPausedAt=0;
+
+  const platformImages = {
+    1: "assets/platform-ufo.png",
+    2: "assets/platform-ufo.png",
+    3: "assets/platform-ufo.png",
+    4: "assets/platform-ufo.png"
+  };
+
+  function formatTime(seconds){
+    seconds=Math.max(0,Math.floor(seconds||0));
+    const m=Math.floor(seconds/60), s=seconds%60;
+    return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
+  }
+  function updateHomeRecords(){
+    $("highScoreStart").textContent=best;
+    $("bestTimeStart").textContent=bestTime?formatTime(bestTime):"--:--";
+  }
+  function startTotalTimer(){
+    totalStart=performance.now();
+    stageStart=totalStart;
+    stageTimes=[0,0,0];
+    totalTime=0;
+    timing=true;
+    $("stageTimer").textContent="00:00";
+  }
+  function startStageTimer(n){
+    stageStart=performance.now();
+    $("stageTimer").textContent="00:00";
+  }
+  function stopStageTimer(n){
+    if(!timing || n<1 || n>3) return 0;
+    const elapsed=Math.max(0,(performance.now()-stageStart)/1000);
+    stageTimes[n-1]=elapsed;
+    return elapsed;
+  }
+  function stopTotalTimer(){
+    if(!timing) return totalTime;
+    totalTime=Math.max(0,(performance.now()-totalStart)/1000);
+    timing=false;
+    return totalTime;
+  }
+  function updateTimerDisplay(){
+    if(timing) $("stageTimer").textContent=formatTime((performance.now()-stageStart)/1000);
+  }
+
+  let worldScale=0.8;
+  function resize(){
+    vw=innerWidth; vh=innerHeight;
+    // مقياس آمن: 80% على الكمبيوتر، ويصغر تلقائياً حسب ارتفاع الهاتف/اللوحي.
+    const safeH=Math.max(260, vh-20);
+    const byHeight=safeH/WORLD_H;
+    if(vw>=1200) worldScale=0.80;
+    else if(vw>=700) worldScale=Math.min(0.80, Math.max(0.50, byHeight));
+    else worldScale=Math.min(0.72, Math.max(0.42, byHeight));
+    document.documentElement.style.setProperty('--world-scale',worldScale.toFixed(4));
+
+    const targetW = vw <= 600 ? Math.min(112, Math.max(78, vw*0.22)) : Math.min(150, Math.max(105, vw*0.15));
+    player.style.width=targetW+"px";
+    playerH = targetW * (882/697);
+    player.style.height="auto";
+
+    if(running && platforms.length){
+      py=Math.min(py, WORLD_H-playerH-8);
+      player.style.top=py+"px";
+    }
+  }
+  addEventListener("resize",resize); resize();
+
+  function setScreen(panel){
+    $("startPanel").style.display="none"; $("stagePanel").style.display="none"; $("questionPanel").style.display="none"; $("endPanel").style.display="none";
+    screen.style.display=panel?"grid":"none";
+    screen.classList.toggle("homeScreen", panel==="start");
+    // عناصر التحكم تظهر فقط أثناء اللعب، ولا تتداخل مع شاشة البداية أو شاشة النهاية.
+    $("hud").style.display=panel?"none":"flex";
+    $("touch").style.display=panel?"none":"flex";
+    if(panel) $(panel+"Panel").style.display="block";
+  }
+  function showToast(t){
+    toast.textContent=t; toast.classList.add("show");
+    clearTimeout(toastTimer); toastTimer=setTimeout(()=>toast.classList.remove("show"),1800);
+  }
+  function updateHUD(){
+    scoreEl.textContent=score; coinsEl.textContent=coins; stageTitle.textContent=`المرحلة ${stage} · ${stageNames[stage-1]}`;
+    factEl.textContent=facts[stage-1];
+    $("playerName").textContent=studentName.trim()||"لاعب";
+    updateHomeRecords();
+  }
+
+  function clearWorldObjects(){
+    field.innerHTML="";
+  }
+  function addPlatform(x,y,w,h,type){
+    const img=document.createElement("img");
+    img.className="platform"; img.src=platformImages[type] || `assets/platforms/platform${type}.png`;
+    img.style.left=x+"px"; img.style.top=y+"px"; img.style.width=w+"px"; img.style.height=h+"px";
+    field.appendChild(img);
+    return {x,y,w,h};
+  }
+  function addCoin(x,y,i){
+    const c=document.createElement("div"); c.className="coin"; c.dataset.index=i; c.style.left=x+"px"; c.style.top=y+"px";
+    field.appendChild(c);
+  }
+  function addQuestionMarker(x,y){
+    const q=document.createElement("div"); q.className="questionMarker"; q.id="questionMarker";
+    q.textContent="؟"; q.style.left=x+"px"; q.style.top=y+"px";
+    field.appendChild(q);
+  }
+  function addFlag(x){
+    const f=document.createElement("div"); f.className="flag"; f.style.left=x+"px"; f.style.top=Math.max(20, WORLD_H-190)+"px";
+    f.innerHTML='<div class="pole"></div><div class="cloth"></div>';
+    field.appendChild(f);
+  }
+
+  let platforms=[], coinData=[], collected=new Set(), flagX=0;
+  function loadStage(n){
+    stage=n; clearWorldObjects();
+    platforms=layouts[n-1].platforms.map(p=>({x:p[0],y:p[1],w:p[2],h:p[3]}));
+    layouts[n-1].platforms.forEach(p=>addPlatform(p[0],p[1],p[2],p[3],p[4]));
+    coinData=layouts[n-1].coins.map((p,i)=>({x:p[0],y:p[1],i}));
+    collected=new Set();
+    questionShown=false; questionActive=false; questionPausedAt=0;
+    coinData.forEach(c=>addCoin(c.x,c.y,c.i));
+    flagX=layouts[n-1].flag; addFlag(flagX);
+    // ضع علامة السؤال في منتصف المرحلة فوق أقرب منصة آمنة.
+    const questionX=flagX*0.50;
+    let questionPlatform=platforms.find(p=>questionX>=p.x && questionX<=p.x+p.w);
+    if(!questionPlatform){
+      questionPlatform=platforms.reduce((best,p)=>{
+        const pc=p.x+p.w/2, bc=best.x+best.w/2;
+        return Math.abs(pc-questionX)<Math.abs(bc-questionX)?p:best;
+      },platforms[0]);
+    }
+    const markerX=Math.max(25,Math.min(W-103,questionPlatform.x+questionPlatform.w/2-39));
+    const markerY=Math.max(70,questionPlatform.y-105);
+    addQuestionMarker(markerX,markerY);
+    const start=platforms[0];
+    px=start.x+30; py=start.y-playerH; vx=0; vy=0; grounded=true; jumpLock=false;
+    coyoteTime=0.11; jumpBuffer=0; safePlatform=start; cameraX=0;
+    updateHUD();
+    $("progress").style.width="0%";
+    player.style.left=px+"px"; player.style.top=py+"px";
+    world.style.transform=`translate3d(0,0,0) scale(${worldScale})`;
+  }
+
+  function enterStage(n){
+    if(n===1 && !timing) startTotalTimer();
+    startStageTimer(n);
+    loadStage(n);
+    setScreen(null);
+    // إعادة إظهار معلومات اللعب كاملة عند بدء مغامرة جديدة
+    // بعد العودة للصفحة الرئيسية: العملات، النقاط، الزمن، المرحلة والتقدم.
+    $("hud").style.display="flex";
+    $("touch").style.display="flex";
+    running=true; last=performance.now();
+    updateHUD();
+    requestAnimationFrame(loop);
+  }
+  function stageIntro(n){
+    stage=n; $("stagePanelTitle").textContent=`المرحلة ${n}: ${stageNames[n-1]}`;
+    $("stagePanelFact").textContent=facts[n-1];
+    setScreen("stage"); running=false;
+  }
+
+  function rectsOverlap(a,b){
+    return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+  }
+  function collectCoins(){
+    const pr={x:px+28,y:py+25,w:playerW-50,h:playerH-35};
+    coinData.forEach(c=>{
+      if(collected.has(c.i)) return;
+      const cr={x:c.x,y:c.y,w:42,h:42};
+      if(rectsOverlap(pr,cr)){
+        collected.add(c.i); score+=10; coins++;
+        playCoinSound();
+        const node=document.querySelector(`.coin[data-index="${c.i}"]`);
+        if(node) node.remove();
+        showCoinRewardV9(10);
+        updateHUD();
+      }
+    });
+  }
+  function showMidStageQuestion(){
+    if(questionShown || questionActive || stage<1 || stage>3) return;
+    questionShown=true; questionActive=true; running=false;
+    const marker=document.getElementById("questionMarker");
+    if(marker) marker.remove();
+    questionPausedAt=performance.now();
+    const data=circulatoryQuestions[stage-1];
+    $("questionStageLabel").textContent=`سؤال المرحلة ${stage}`;
+    $("questionText").textContent=data.q;
+    $("questionFeedback").textContent="اختر الإجابة الصحيحة للمتابعة";
+    const wrap=$("questionOptions"); wrap.innerHTML="";
+    data.options.forEach((text,i)=>{
+      const b=document.createElement("button"); b.className="questionOption"; b.type="button"; b.textContent=text;
+      b.onclick=()=>answerMidStageQuestion(i,b,data.answer);
+      wrap.appendChild(b);
+    });
+    setScreen("question");
+  }
+  function answerMidStageQuestion(index,button,answer){
+    if(!questionActive) return;
+    const buttons=[...document.querySelectorAll("#questionOptions .questionOption")];
+    buttons.forEach(b=>b.disabled=true);
+    if(index===answer){
+      button.classList.add("correct");
+      score+=20;
+      $("questionFeedback").textContent="إجابة صحيحة! +20 نقطة";
+      beep(660,.07,"sine",.035,0); beep(990,.10,"sine",.03,.05);
+    }else{
+      button.classList.add("wrong");
+      buttons[answer].classList.add("correct");
+      $("questionFeedback").textContent="ليست الإجابة الصحيحة، لكن يمكنك متابعة المغامرة";
+      playFallSound();
+    }
+    updateHUD();
+    setTimeout(()=>{
+      const pause=(performance.now()-questionPausedAt)/1000;
+      if(timing){ stageStart+=pause; totalStart+=pause; }
+      questionActive=false;
+      setScreen(null);
+      $("hud").style.display="flex"; $("touch").style.display="flex";
+      running=true; last=performance.now();
+      requestAnimationFrame(loop);
+    },650);
+  }
+  function checkMidStageQuestion(){
+    if(questionShown || questionActive) return;
+    const marker=document.getElementById("questionMarker");
+    if(!marker) return;
+    const mr={x:parseFloat(marker.style.left)||0,y:parseFloat(marker.style.top)||0,w:78,h:78};
+    const pr={x:px+24,y:py+20,w:playerW-48,h:playerH-30};
+    if(rectsOverlap(pr,mr)) showMidStageQuestion();
+  }
+
+  function checkFlag(){
+    if(px+playerW*0.65 >= flagX){
+      running=false;
+      if(stage<3){
+        stopStageTimer(stage);
+        score+=50; updateHUD();
+        showToast("أحسنت! +50 نقطة للانتقال");
+        setTimeout(()=>stageIntro(stage+1),700);
+      }else{
+        stopStageTimer(3);
+        finishGame();
+      }
+    }
+  }
+  function finishGame(){
+    totalTime=stopTotalTimer();
+    const oldBestScore=best;
+    const oldBestTime=bestTime;
+
+    // أسرع زمن مرتبط بأعلى نتيجة: لا يتغير إلا إذا حقق اللاعب
+    // نتيجة أعلى، أو حقق نفس أعلى نتيجة بزمن أسرع.
+    if(score>oldBestScore){
+      best=score;
+      bestTime=totalTime;
+      localStorage.setItem("scienceAdventureBest",String(best));
+      localStorage.setItem("scienceAdventureBestTime",String(Math.floor(totalTime)));
+    }else if(score===oldBestScore && (!oldBestTime || totalTime<oldBestTime)){
+      bestTime=totalTime;
+      localStorage.setItem("scienceAdventureBestTime",String(Math.floor(totalTime)));
+    }
+
+    $("finalScore").textContent=score;
+    $("finalCoins").textContent=coins;
+    $("finalBest").textContent=best;
+    $("finalStage1").textContent=formatTime(stageTimes[0]);
+    $("finalStage2").textContent=formatTime(stageTimes[1]);
+    $("finalStage3").textContent=formatTime(stageTimes[2]);
+    $("finalTotalTime").textContent=formatTime(totalTime);
+    updateHomeRecords();
+    setScreen("end");
+  }
+
+  function update(dt){
+    // فيزياء قفز مستقرة: ضغط Space يبدأ قفزة واحدة فقط.
+    const dir=(keys.right?1:0)-(keys.left?1:0);
+    vx += (dir*speed-vx)*Math.min(1,dt*12);
+    if(!dir) vx *= Math.pow(0.0008,dt);
+
+    if(grounded) coyoteTime=0.11;
+    else coyoteTime=Math.max(0,coyoteTime-dt);
+
+    // نخزن ضغطة القفز لجزء من الثانية، مع دعم النقر السريع باللمس.
+    if(jumpTap){ jumpBuffer=0.14; jumpTap=false; }
+    if(keys.jump && !jumpLock) jumpBuffer=Math.max(jumpBuffer,0.12);
+    jumpLock=keys.jump;
+    if(jumpBuffer>0) jumpBuffer=Math.max(0,jumpBuffer-dt);
+
+    if(jumpBuffer>0 && (grounded || coyoteTime>0)){
+      vy=-jump;
+      grounded=false;
+      coyoteTime=0;
+      jumpBuffer=0;
+    }
+
+    // عند ترك Space أثناء الصعود تصبح القفزة أقصر، مع بقاء الجاذبية طبيعية.
+    if(!keys.jump && vy<0) vy += gravity*0.55*dt;
+    vy += gravity*dt;
+
+    const nx=Math.max(20,Math.min(W-playerW-20,px+vx*dt));
+    let ny=py+vy*dt;
+    const prevBottom=py+playerH;
+    let land=null;
+
+    // الهبوط يكون فقط إذا كانت نقطة قدمي اللاعب فوق المنصة فعليًا.
+    // لا نستخدم عرض الجسم مع هامش كبير، حتى لا يعتبر الفراغ بين منصتين أرضًا.
+    if(vy>=0){
+      const feetX = nx + playerW*0.50;
+      for(const p of platforms){
+        const underFeet = feetX >= p.x && feetX <= p.x + p.w;
+        const crossed = prevBottom <= p.y + 2 && ny + playerH >= p.y;
+        if(underFeet && crossed){
+          land=p;
+          break;
+        }
+      }
+    }
+
+    if(land){
+      ny=land.y-playerH;
+      vy=0;
+      grounded=true;
+      safePlatform=land;
+      coyoteTime=0.11;
+    }else{
+      grounded=false;
+      // اللاعب في الهواء: لا نسمح بتثبيت موقعه بين منصتين.
+      if(vy <= 0) {
+        // لا نوقف الحركة الرأسية؛ الجاذبية تستمر في كل إطار.
+      }
+    }
+
+    // إذا أخطأ اللاعب وسقط، يعود إلى آخر منصة آمنة بدل البقاء في أسفل الشاشة.
+    if(ny>WORLD_H+180){
+      score=Math.max(0,score-10);
+      playFallSound();
+      updateHUD();
+      const respawn=safePlatform || platforms[0];
+      px=respawn.x+Math.min(40,respawn.w*0.18);
+      py=respawn.y-playerH;
+      vx=0; vy=0; grounded=true;
+      jumpLock=false; coyoteTime=0.11; jumpBuffer=0;
+      showToast("سقطت! عدت إلى آخر منصة آمنة");
+      player.style.left=px+"px";
+      player.style.top=py+"px";
+      return;
+    }
+
+    px=nx; py=ny;
+    collectCoins();
+    checkMidStageQuestion();
+    if(!questionActive) checkFlag();
+
+    // الكاميرا تحرك العالم فقط؛ الخلفية مستقلة وثابتة.
+    const logicalVW=vw/Math.max(worldScale,0.01);
+    const target=Math.max(0,Math.min(W-logicalVW,px-logicalVW*0.35));
+    cameraX += (target-cameraX)*Math.min(1,dt*6);
+    world.style.transform=`translate3d(${-cameraX*worldScale}px,0,0) scale(${worldScale})`;
+    player.style.left=px+"px"; player.style.top=py+"px";
+    player.style.transform=`scaleX(${vx< -10?-1:1}) ${grounded&&Math.abs(vx)>40?'translateY(-1px)':'translateY(0)'}`;
+    const prog=Math.max(0,Math.min(100,(px/(flagX+80))*100)); progressEl.style.width=prog+"%";
+  }
+
+  function loop(t){
+    if(!running) return;
+    const dt=Math.min(.032,(t-last)/1000); last=t; update(dt); updateTimerDisplay();
+    requestAnimationFrame(loop);
+  }
+
+  // تحكم لمس احترافي وثابت للهواتف والأجهزة اللوحية:
+  // pointer capture يمنع فقدان الضغطة عند تحرك الإصبع، وjumpTap يضمن
+  // تسجيل نقرة القفز حتى لو كانت الضغطة قصيرة جداً بين إطارين.
+  let jumpTap=false;
+  function bindHold(btn,key){
+    if(!btn) return;
+    const down=e=>{
+      if(e.cancelable) e.preventDefault();
+      keys[key]=true;
+      if(e.pointerId!=null && btn.setPointerCapture){ try{btn.setPointerCapture(e.pointerId)}catch(_){} }
+    };
+    const up=e=>{
+      if(e.cancelable) e.preventDefault();
+      keys[key]=false;
+    };
+    btn.addEventListener("pointerdown",down,{passive:false});
+    ["pointerup","pointercancel","pointerleave","lostpointercapture"].forEach(ev=>btn.addEventListener(ev,up,{passive:false}));
+    // دعم متصفحات اللمس القديمة التي لا تستخدم Pointer Events جيداً.
+    btn.addEventListener("touchstart",down,{passive:false});
+    ["touchend","touchcancel"].forEach(ev=>btn.addEventListener(ev,up,{passive:false}));
+    btn.addEventListener("contextmenu",e=>e.preventDefault());
+  }
+  bindHold($("leftBtn"),"left");
+  bindHold($("rightBtn"),"right");
+
+  const jumpBtn=$("jumpBtn");
+  const jumpDown=e=>{
+    if(e.cancelable) e.preventDefault();
+    keys.jump=true;
+    jumpTap=true;
+    if(e.pointerId!=null && jumpBtn.setPointerCapture){ try{jumpBtn.setPointerCapture(e.pointerId)}catch(_){} }
+  };
+  const jumpUp=e=>{
+    if(e.cancelable) e.preventDefault();
+    keys.jump=false;
+  };
+  jumpBtn.addEventListener("pointerdown",jumpDown,{passive:false});
+  ["pointerup","pointercancel","pointerleave","lostpointercapture"].forEach(ev=>jumpBtn.addEventListener(ev,jumpUp,{passive:false}));
+  jumpBtn.addEventListener("touchstart",jumpDown,{passive:false});
+  ["touchend","touchcancel"].forEach(ev=>jumpBtn.addEventListener(ev,jumpUp,{passive:false}));
+  jumpBtn.addEventListener("contextmenu",e=>e.preventDefault());
+
+  addEventListener("keydown",e=>{
+    if(["ArrowLeft","ArrowRight","Space"].includes(e.code)) e.preventDefault();
+    if(e.code==="ArrowLeft")keys.left=true;
+    if(e.code==="ArrowRight")keys.right=true;
+    if(e.code==="Space")keys.jump=true;
+    if(e.code==="Escape" && running){running=false;setScreen("start");}
+  });
+  addEventListener("keyup",e=>{
+    if(e.code==="ArrowLeft")keys.left=false;
+    if(e.code==="ArrowRight")keys.right=false;
+    if(e.code==="Space")keys.jump=false;
+  });
+
+  $("startBtn").onclick=()=>{
+    audioReady();
+    $("hud").style.display="none";
+    $("touch").style.display="none";
+    studentName=($("name").value||"").trim().replace(/\s+/g," ").slice(0,40);
+    name=studentName||"لاعب";
+    score=0;coins=0;stage=1;
+    totalTime=0; stageTimes=[0,0,0]; timing=false;
+    // دخول مباشر إلى المرحلة الأولى حتى لا تتعطل شاشة الانتقال على الهاتف.
+    enterStage(1);
+  };
+  $("continueBtn").onclick=()=>{
+    audioReady();
+    enterStage(stage || 1);
+  };
+  $("restartBtn").onclick=()=>{
+    // العودة إلى شاشة البداية الأصلية، وليس إلى شاشة دخول المرحلة الأولى.
+    running=false;
+    stage=1;
+    score=0;
+    coins=0;
+    cameraX=0;
+    vx=0;
+    vy=0;
+    grounded=false;
+    jumpLock=false;
+    coyoteTime=0;
+    jumpBuffer=0;
+    safePlatform=null;
+    keys.left=false;
+    keys.right=false;
+
+    // إيقاف/إخفاء عناصر اللعب وإظهار الصفحة الرئيسية الأصلية.
+    $("hud").style.display="none";
+    $("touch").style.display="none";
+    setScreen("start");
+
+    // تجهيز شاشة البداية للاعب جديد.
+    $("name").value="";
+    studentName="لاعب";
+    timing=false; totalTime=0; stageTimes=[0,0,0];
+    updateHomeRecords();
+    $("score").textContent="0";
+    $("coins").textContent="0";
+    $("stageTitle").textContent="المرحلة 1";
+    $("playerName").textContent="لاعب";
+
+    setTimeout(()=>$("name").focus(),80);
+  };
+  setScreen("start");
+  updateHUD();
+})();
+</script>
+
+
+<script id="robust-fall-detection-v6">
+(function(){
+  function installFallSafety(){
+    if(typeof window.player==="undefined" && typeof player==="undefined") return;
+    const p = (typeof window.player!=="undefined") ? window.player : player;
+    if(!p) return;
+
+    // This guard is intentionally conservative: it only declares a fall when
+    // the player is below the playable floor, preventing false positives on platforms.
+    window.__fallSafety = function(){
+      try{
+        const floor = (typeof WORLD_H !== "undefined" ? WORLD_H : 
+                       (typeof canvas !== "undefined" ? canvas.height : 540)) + 40;
+        const py = Number(p.y);
+        const ph = Number(p.h || p.height || 1);
+        if(Number.isFinite(py) && py + ph > floor){
+          if(typeof window.handleFall === "function") window.handleFall();
+          else if(typeof handleFall === "function") handleFall();
+          return true;
+        }
+      }catch(e){}
+      return false;
+    };
+  }
+  document.addEventListener("DOMContentLoaded", installFallSafety);
+})();
+</script>
+
+
+<script id="responsive-final-v8-js">(function(){function fit(){const c=document.querySelector("canvas");if(!c)return;const w=c.width||960,h=c.height||540,vw=visualViewport?.width||innerWidth,vh=visualViewport?.height||innerHeight;let scale;if(vw>1100)scale=Math.min(vw*.8/w,vh*.78/h,1);else if(vw>600)scale=Math.min((vw-24)/w,(vh-150)/h,1);else scale=Math.min((vw-10)/w,(vh-125)/h,1);c.style.width=Math.round(w*scale)+"px";c.style.height=Math.round(h*scale)+"px"}addEventListener("resize",fit,{passive:true});addEventListener("orientationchange",()=>setTimeout(fit,200),{passive:true});addEventListener("load",()=>setTimeout(fit,120));document.addEventListener("DOMContentLoaded",()=>setTimeout(fit,120))})();</script><script id="coin-reward-v9">
+(function(){
+ let el,t;
+ function show(amount){
+  if(!el){el=document.createElement("div");el.className="coinRewardV9";document.body.appendChild(el)}
+  el.textContent="+"+amount+" عملات";
+  el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+  clearTimeout(t);t=setTimeout(()=>el.classList.remove("show"),900);
+ }
+ window.showCoinRewardV9=show;
+})();
+</script></body>
+</html>
